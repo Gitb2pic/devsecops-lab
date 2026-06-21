@@ -76,6 +76,66 @@ services:
       - backend
     restart: unless-stopped
 
+  # ===========================================================================
+  # MONITORING — Prometheus collecte, Grafana affiche, 2 exporters fournissent.
+  # Tout sur le réseau "monitoring" (interne). Grafana sort via "edge".
+  # ===========================================================================
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    volumes:
+      - ../monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - promdata:/prometheus
+    networks:
+      - monitoring
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+      # Grafana servi sous le sous-chemin /grafana (derrière le reverse proxy).
+      GF_SERVER_ROOT_URL: "%(protocol)s://%(domain)s/grafana"
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+    volumes:
+      - grafanadata:/var/lib/grafana
+      - ../monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=deploy_edge"
+      - "traefik.http.routers.grafana.rule=PathPrefix(`/grafana`)"
+      - "traefik.http.routers.grafana.entrypoints=web"
+      - "traefik.http.services.grafana.loadbalancer.server.port=3000"
+    networks:
+      - edge          # pour être joint par Traefik
+      - monitoring    # pour interroger Prometheus
+    restart: unless-stopped
+
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    command:
+      - "--path.rootfs=/host"
+    pid: host
+    volumes:
+      - /:/host:ro,rslave
+    networks:
+      - monitoring
+    restart: unless-stopped
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    privileged: true
+    devices:
+      - /dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    networks:
+      - monitoring
+    restart: unless-stopped
+
 # =============================================================================
 # RÉSEAUX — le cœur de la segmentation
 # =============================================================================
@@ -85,9 +145,14 @@ networks:
   backend:
     driver: bridge
     internal: true        # AUCUNE passerelle, AUCUNE route Internet : isole la base
+  monitoring:
+    driver: bridge
+    internal: true        # exporters + Prometheus isolés ; Grafana sort via edge
 
 # =============================================================================
 # VOLUMES — stockage persistant
 # =============================================================================
 volumes:
   pgdata:
+  promdata:               # base de métriques de Prometheus
+  grafanadata:            # dashboards et config Grafana

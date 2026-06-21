@@ -1,0 +1,19 @@
+# Configuration Prometheus : qui scraper, et à quelle fréquence.
+global:
+  scrape_interval: 15s        # collecte des métriques toutes les 15 s
+
+scrape_configs:
+  # Prometheus se surveille lui-même.
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # Métriques de l'hôte (CPU, RAM, disque, réseau de la VM).
+  - job_name: node
+    static_configs:
+      - targets: ["node-exporter:9100"]
+
+  # Métriques par conteneur (CPU/mémoire/réseau de chaque conteneur).
+  - job_name: cadvisor
+    static_configs:
+      - targets: ["cadvisor:8080"]
