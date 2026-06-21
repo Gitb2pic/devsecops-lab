@@ -7,7 +7,9 @@ services:
   # 1) REVERSE PROXY (Traefik) — le SEUL service exposé au monde extérieur
   # ===========================================================================
   traefik:
-    image: traefik:v3.3
+    # v3.6.1+ : négocie automatiquement la version de l'API Docker.
+    # Les versions <= v3.3 utilisent l'API 1.24, supprimée par Docker récent.
+    image: traefik:v3.6.1
     command:
       # Provider Docker : Traefik lit les "labels" des conteneurs pour router.
       - "--providers.docker=true"
@@ -40,6 +42,8 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     labels:
       - "traefik.enable=true"                                            # activer le routage
+      # L'app est sur 2 réseaux : on dit à Traefik lequel utiliser pour la joindre.
+      - "traefik.docker.network=deploy_edge"                             # sinon -> Gateway Timeout
       - "traefik.http.routers.app.rule=PathPrefix(`/`)"                  # router tout le trafic vers l'app
       - "traefik.http.routers.app.entrypoints=web"                       # via le point d'entrée HTTP
       - "traefik.http.services.app.loadbalancer.server.port=8000"        # port interne ciblé (uvicorn)
