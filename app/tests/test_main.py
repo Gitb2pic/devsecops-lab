@@ -14,7 +14,7 @@ def test_root_repond_200():
     # GET / doit renvoyer 200 et le message de bienvenue.
     response = client.get("/")
     assert response.status_code == 200
-    assert response.json() == {"message": "Salut depuis l'app conteneurisee"}
+    assert response.json() == {"message": "Salut depuis l'app deployee automatiquement !"}
 
 
 def test_health_repond_ok():
