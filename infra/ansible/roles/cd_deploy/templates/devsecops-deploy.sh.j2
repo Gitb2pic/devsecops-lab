@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Déploiement pull-based : ne redéploie QUE si main a de nouveaux commits.
+# Géré par Ansible — ne pas éditer à la main.
+set -euo pipefail
+
+REPO_DIR="{{ cd_deploy_repo_dir }}"
+BRANCH="{{ cd_deploy_branch }}"
+
+cd "$REPO_DIR"
+
+# Récupère l'état distant sans modifier le local
+git fetch --quiet origin "$BRANCH"
+
+LOCAL="$(git rev-parse HEAD)"
+REMOTE="$(git rev-parse "origin/$BRANCH")"
+
+if [ "$LOCAL" = "$REMOTE" ]; then
+  echo "$(date -Is) | À jour ($LOCAL) — rien à déployer."
+  exit 0
+fi
+
+echo "$(date -Is) | Nouveau commit : $LOCAL -> $REMOTE. Déploiement..."
+git pull --ff-only origin "$BRANCH"
+
+# .env (secret, hors Git) est dans deploy/ et survit aux pulls.
+cd "$REPO_DIR/deploy"
+docker compose up -d --build
+
+echo "$(date -Is) | Déploiement terminé."

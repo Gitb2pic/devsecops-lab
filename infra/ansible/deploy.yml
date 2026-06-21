@@ -1,0 +1,12 @@
+---
+- name: "CD pull-based — déploiement automatique sur la VM"
+  hosts: vmlab
+  become: true
+  pre_tasks:
+    - name: "Vérifier que la cible est bien Debian/Ubuntu"
+      ansible.builtin.assert:
+        that:
+          - ansible_facts['os_family'] == "Debian"
+        fail_msg: "Ce playbook cible Debian/Ubuntu uniquement."
+  roles:
+    - cd_deploy

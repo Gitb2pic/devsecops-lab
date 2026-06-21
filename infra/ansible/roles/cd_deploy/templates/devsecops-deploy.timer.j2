@@ -1,0 +1,10 @@
+[Unit]
+Description=Verifie main et deploie periodiquement le DevSecOps lab
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec={{ cd_deploy_interval }}
+Persistent=true
+
+[Install]
+WantedBy=timers.target

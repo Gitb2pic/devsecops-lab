@@ -1,0 +1,61 @@
+---
+- name: "Installer git (nécessaire au déploiement pull)"
+  ansible.builtin.apt:
+    name: git
+    state: present
+    update_cache: true
+
+- name: "Cloner / mettre à jour le dépôt sur la VM"
+  ansible.builtin.git:
+    repo: "{{ cd_deploy_repo_url }}"
+    dest: "{{ cd_deploy_repo_dir }}"
+    version: "{{ cd_deploy_branch }}"
+    update: true
+  become: true
+  become_user: "{{ cd_deploy_user }}"
+
+- name: "Vérifier la présence du fichier .env (secret, hors Git)"
+  ansible.builtin.stat:
+    path: "{{ cd_deploy_repo_dir }}/deploy/.env"
+  register: cd_deploy_env_file
+
+- name: "Refuser d'activer le CD si .env est absent"
+  ansible.builtin.assert:
+    that:
+      - cd_deploy_env_file.stat.exists
+    fail_msg: >-
+      {{ cd_deploy_repo_dir }}/deploy/.env est absent. Crée-le une fois
+      (POSTGRES_DB / POSTGRES_USER / POSTGRES_PASSWORD) puis relance.
+
+- name: "Installer le script de déploiement"
+  ansible.builtin.template:
+    src: devsecops-deploy.sh.j2
+    dest: /usr/local/bin/devsecops-deploy.sh
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: "Installer l'unité systemd (service)"
+  ansible.builtin.template:
+    src: devsecops-deploy.service.j2
+    dest: /etc/systemd/system/devsecops-deploy.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Recharger systemd
+
+- name: "Installer l'unité systemd (timer)"
+  ansible.builtin.template:
+    src: devsecops-deploy.timer.j2
+    dest: /etc/systemd/system/devsecops-deploy.timer
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Recharger systemd
+
+- name: "Activer et démarrer le timer de déploiement"
+  ansible.builtin.systemd_service:
+    name: devsecops-deploy.timer
+    enabled: true
+    state: started
+    daemon_reload: true

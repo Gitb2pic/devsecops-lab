@@ -1,0 +1,6 @@
+---
+cd_deploy_repo_url: "https://github.com/Gitb2pic/devsecops-lab.git"
+cd_deploy_repo_dir: "/home/deploy/devsecops-lab"
+cd_deploy_branch: main
+cd_deploy_user: deploy
+cd_deploy_interval: 2min        # fréquence de vérification de main
