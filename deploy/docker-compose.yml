@@ -1,0 +1,89 @@
+# docker-compose.yml — la stack applicative et sa segmentation reseau.
+# Lancement : docker compose up -d --build   (depuis le dossier deploy/)
+
+services:
+
+  # ===========================================================================
+  # 1) REVERSE PROXY (Traefik) — le SEUL service exposé au monde extérieur
+  # ===========================================================================
+  traefik:
+    image: traefik:v3.3
+    command:
+      # Provider Docker : Traefik lit les "labels" des conteneurs pour router.
+      - "--providers.docker=true"
+      # Ne route QUE les conteneurs qui le demandent (traefik.enable=true).
+      - "--providers.docker.exposedbydefault=false"
+      # Point d'entrée HTTP sur le port 80.
+      - "--entrypoints.web.address=:80"
+    ports:
+      # HÔTE:CONTENEUR. Publie le port 80 de la VM vers Traefik.
+      # C'est l'UNIQUE porte ouverte vers l'extérieur de toute la stack.
+      - "80:80"
+    volumes:
+      # Traefik lit l'API Docker pour découvrir les conteneurs. En ro = lecture
+      # seule. (Voir la note sécurité : ce montage est sensible, on le durcira.)
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+    networks:
+      - edge
+    restart: unless-stopped
+
+  # ===========================================================================
+  # 2) APPLICATION — sur DEUX réseaux : edge (reçoit le proxy) + backend
+  #    (atteint la base). AUCUN port publié : injoignable en direct de dehors.
+  # ===========================================================================
+  app:
+    build: ../app                  # construit l'image depuis notre Dockerfile
+    environment:
+      POSTGRES_HOST: db            # 'db' résolu par le DNS Docker (service ci-dessous)
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    labels:
+      - "traefik.enable=true"                                            # activer le routage
+      - "traefik.http.routers.app.rule=PathPrefix(`/`)"                  # router tout le trafic vers l'app
+      - "traefik.http.routers.app.entrypoints=web"                       # via le point d'entrée HTTP
+      - "traefik.http.services.app.loadbalancer.server.port=8000"        # port interne ciblé (uvicorn)
+    networks:
+      - edge
+      - backend
+    depends_on:
+      db:
+        condition: service_healthy  # démarre seulement quand la base est prête
+    restart: unless-stopped
+
+  # ===========================================================================
+  # 3) BASE DE DONNÉES — UNIQUEMENT sur backend (réseau internal: true).
+  #    Aucun port publié, aucune route Internet : invisible de l'extérieur.
+  # ===========================================================================
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data    # volume nommé = données persistantes
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - backend
+    restart: unless-stopped
+
+# =============================================================================
+# RÉSEAUX — le cœur de la segmentation
+# =============================================================================
+networks:
+  edge:
+    driver: bridge        # réseau "public" : possède une passerelle vers l'extérieur
+  backend:
+    driver: bridge
+    internal: true        # AUCUNE passerelle, AUCUNE route Internet : isole la base
+
+# =============================================================================
+# VOLUMES — stockage persistant
+# =============================================================================
+volumes:
+  pgdata:

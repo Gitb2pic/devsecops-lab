@@ -1,0 +1,83 @@
+---
+# Pas de "when: os_family == Debian" sur chaque tâche : l'assert du play
+# (site.yml) garantit déjà qu'on est sur Debian/Ubuntu. Code plus lisible.
+
+- name: "Installer les paquets de sécurité de base"
+  ansible.builtin.apt:
+    name:
+      - ufw
+      - fail2ban
+      - unattended-upgrades
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+# --- Sudo sans mot de passe pour l'utilisateur de déploiement ---
+# Géré en IaC (et non à la main) : la config become est désormais reproductible.
+- name: "Sudo sans mot de passe pour l'utilisateur de déploiement"
+  community.general.sudoers:
+    name: deploy-nopasswd
+    user: "{{ hardening_deploy_user }}"
+    commands: ALL
+    nopassword: true
+    validation: detect      # validé par visudo avant écriture (anti-lockout)
+    state: present
+
+# --- Pare-feu UFW : tout fermé sauf les ports voulus ---
+- name: "UFW — politique par défaut (deny entrant, allow sortant)"
+  community.general.ufw:
+    direction: "{{ item.direction }}"
+    policy: "{{ item.policy }}"
+  loop:
+    - { direction: incoming, policy: deny }
+    - { direction: outgoing, policy: allow }
+
+- name: "UFW — autoriser uniquement les ports déclarés"
+  community.general.ufw:
+    rule: allow
+    port: "{{ item }}"
+    proto: tcp
+  loop: "{{ hardening_allowed_tcp_ports }}"
+
+- name: "UFW — activer le pare-feu"
+  community.general.ufw:
+    state: enabled
+
+# --- Durcissement SSH ---
+- name: "SSH — déposer la configuration durcie"
+  ansible.builtin.template:
+    src: sshd_hardening.conf.j2
+    dest: /etc/ssh/sshd_config.d/99-hardening.conf
+    owner: root
+    group: root
+    mode: "0644"
+    validate: "sshd -t -f %s"
+  notify: Redémarrer sshd
+
+# --- fail2ban ---
+- name: "Fail2ban — jail sshd"
+  ansible.builtin.copy:
+    dest: /etc/fail2ban/jail.d/sshd.local
+    mode: "0644"
+    content: |
+      [sshd]
+      enabled = true
+      maxretry = 4
+      findtime = 10m
+      bantime = 1h
+  notify: Redémarrer fail2ban
+
+- name: "Fail2ban — activer au démarrage"
+  ansible.builtin.service:
+    name: fail2ban
+    enabled: true
+    state: started
+
+# --- Mises à jour de sécurité automatiques ---
+- name: "Activer les mises à jour de sécurité automatiques"
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/20auto-upgrades
+    mode: "0644"
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";

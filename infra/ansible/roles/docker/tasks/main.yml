@@ -1,0 +1,57 @@
+---
+# Ton cas : Docker est DÉJÀ installé. On le détecte et on saute l'installation,
+# tout en gardant le rôle reproductible sur une VM neuve (où il installera tout).
+
+- name: "Détecter si Docker est déjà présent"
+  ansible.builtin.command: docker --version
+  register: docker_version_check
+  changed_when: false      # simple lecture : ne modifie rien
+  failed_when: false       # absent = pas une erreur, juste rc != 0
+
+- name: "Installer Docker depuis le dépôt officiel (uniquement si absent)"
+  when: docker_version_check.rc != 0
+  block:
+    - name: "Installer les prérequis APT"
+      ansible.builtin.apt:
+        name:
+          - ca-certificates
+          - curl
+        state: present
+        update_cache: true
+
+    - name: "Déclarer le dépôt Docker (format deb822, clé GPG incluse)"
+      ansible.builtin.deb822_repository:
+        name: docker
+        types: deb
+        uris: "https://download.docker.com/linux/ubuntu"
+        suites: "{{ ansible_facts['distribution_release'] }}"
+        components: stable
+        architectures: "{{ docker_arch }}"
+        signed_by: "https://download.docker.com/linux/ubuntu/gpg"
+        enabled: true
+        state: present
+
+    - name: "Installer Docker Engine + plugin Compose"
+      ansible.builtin.apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+        state: present
+        update_cache: true
+
+# --- Tâches TOUJOURS exécutées (Docker déjà là OU fraîchement installé) ---
+# C'est ici que se règle ce qui t'avait bloqué : l'appartenance au groupe docker.
+- name: "S'assurer que le service Docker est démarré et activé"
+  ansible.builtin.service:
+    name: docker
+    enabled: true
+    state: started
+
+- name: "Ajouter l'utilisateur de déploiement au groupe docker"
+  ansible.builtin.user:
+    name: "{{ docker_user }}"
+    groups: docker
+    append: true

@@ -1,0 +1,17 @@
+---
+# Variables préfixées par le nom du rôle (hardening_) : convention senior /
+# EX294, évite toute collision avec les variables d'un autre rôle.
+
+# ATTENTION : la clé SSH de l'utilisateur doit être déployée AVANT le 1er run,
+# car ces réglages désactivent l'authentification par mot de passe.
+hardening_ssh_permit_root_login: "no"
+hardening_ssh_password_authentication: "no"
+
+# Utilisateur de déploiement qui reçoit le sudo sans mot de passe.
+hardening_deploy_user: deploy
+
+# Seuls ports TCP autorisés en entrée par le pare-feu.
+hardening_allowed_tcp_ports:
+  - "22"    # SSH
+  - "80"    # HTTP (redirigé vers HTTPS par le reverse proxy)
+  - "443"   # HTTPS

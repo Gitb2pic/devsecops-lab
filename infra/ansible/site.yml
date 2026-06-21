@@ -1,0 +1,18 @@
+---
+- name: "Socle DevSecOps — durcissement + Docker"
+  hosts: vmlab
+  become: true
+  pre_tasks:
+    - name: "Vérifier que la cible est bien Debian/Ubuntu"
+      ansible.builtin.assert:
+        that:
+          - ansible_facts['os_family'] == "Debian"
+        fail_msg: >-
+          Ce playbook cible Debian/Ubuntu uniquement
+          (OS détecté : {{ ansible_facts['os_family'] }}).
+        success_msg: >-
+          OS compatible : {{ ansible_facts['distribution'] }}
+          {{ ansible_facts['distribution_version'] }}
+  roles:
+    - hardening
+    - docker
