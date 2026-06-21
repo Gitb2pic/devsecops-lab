@@ -25,7 +25,7 @@ def health():
 
 @app.get("/")
 def root():
-    return {"message": "Salut depuis l'app conteneurisee"}
+    return {"message": "Salut depuis l'app deployee automatiquement !"}
 
 
 @app.get("/db")
